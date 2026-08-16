@@ -11,6 +11,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { DashboardLayout } from "@/components/dashboard-layout"
 import { Separator } from "@/components/ui/separator"
 import { queueApi, adminApi, doctorApi } from "@/lib/api-client"
+import { useDoctorQueueEvents } from "@/hooks/use-queue-events"
 import { PatientQueueInfo, DoctorQueueResponse, HospitalResponse, DoctorResponse } from "@/types/api"
 
 export default function DoctorQueueManagementPage() {
@@ -33,14 +34,20 @@ export default function DoctorQueueManagementPage() {
     loadDoctorProfile()
   }, [])
 
+  // Live updates when a patient joins, cancels, or is re-assigned away. The
+  // interval below stays as a fallback -- a doctor working from a stale list
+  // calls the wrong patient.
+  const { connected: liveConnected } = useDoctorQueueEvents(doctorProfile?.id ?? null, {
+    onEvent: () => loadQueue(),
+  })
+
   useEffect(() => {
     if (doctorProfile && (selectedHospital || queueType === 'cross_hospital' || queueType === 'all')) {
       loadQueue()
-      // Set up auto-refresh every 30 seconds
-      const interval = setInterval(loadQueue, 30000)
+      const interval = setInterval(loadQueue, liveConnected ? 120000 : 30000)
       return () => clearInterval(interval)
     }
-  }, [selectedHospital, doctorProfile, queueType])
+  }, [selectedHospital, doctorProfile, queueType, liveConnected])
 
   const loadHospitals = async () => {
     try {

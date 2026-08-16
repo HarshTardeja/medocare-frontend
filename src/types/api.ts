@@ -462,6 +462,12 @@ export interface QueueStatusResponse {
   is_emergency: boolean;
   ai_summary?: string;
   symptoms_description?: string;
+  /** When the patient should set off, so they can wait at home until then. */
+  leave_at?: string;
+  travel_time_minutes?: number;
+  distance_km?: number;
+  /** Once locked in the entry stops floating between hospitals. */
+  locked_in?: boolean;
 }
 
 export interface AvailableDoctorResponse {

@@ -391,6 +391,16 @@ export const queueApi = {
   },
 };
 
+// Live events (SSE)
+export const eventsApi = {
+  // EventSource cannot send an Authorization header, so we swap the bearer
+  // token for a short-lived stream token that rides in the query string.
+  getStreamToken: async (): Promise<{ token: string; expires_in: number }> => {
+    const { data } = await api.post('/api/events/token');
+    return data;
+  },
+};
+
 // Consultation API
 export const consultationApi = {
   getPatientByQueue: async (queueId: number): Promise<any> => {

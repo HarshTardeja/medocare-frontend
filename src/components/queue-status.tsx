@@ -1,13 +1,14 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { Clock, User, MapPin, Phone, AlertTriangle, CheckCircle, XCircle, Loader2 } from "lucide-react"
+import { useState, useEffect, useCallback } from "react"
+import { Clock, User, MapPin, Phone, AlertTriangle, CheckCircle, XCircle, Loader2, Radio, Navigation } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { queueApi } from "@/lib/api-client"
+import { useQueueEvents } from "@/hooks/use-queue-events"
 import { QueueStatusResponse, QueueStatus, QueuePriority } from "@/types/api"
 
 interface QueueStatusProps {
@@ -22,16 +23,9 @@ export function QueueStatusComponent({ queueId, onCancel, className }: QueueStat
   const [error, setError] = useState<string | null>(null)
   const [cancelling, setCancelling] = useState(false)
 
-  useEffect(() => {
-    loadQueueStatus()
-    
-    // Set up polling for live updates
-    const interval = setInterval(loadQueueStatus, 30000) // Update every 30 seconds
-    
-    return () => clearInterval(interval)
-  }, [queueId])
+  const [reassignmentNotice, setReassignmentNotice] = useState<string | null>(null)
 
-  const loadQueueStatus = async () => {
+  const loadQueueStatus = useCallback(async () => {
     try {
       const status = await queueApi.getQueueStatus(queueId)
       setQueueStatus(status)
@@ -41,7 +35,31 @@ export function QueueStatusComponent({ queueId, onCancel, className }: QueueStat
     } finally {
       setLoading(false)
     }
-  }
+  }, [queueId])
+
+  // Live updates. The poll below stays as a fallback: SSE can be dropped by a
+  // proxy or lost if Redis is unavailable, and a stale queue position is worse
+  // than a slightly chatty one.
+  const { connected } = useQueueEvents(queueId, {
+    onEvent: (event, data) => {
+      if (event === "reassigned") {
+        const payload = data as { hospital_name?: string }
+        setReassignmentNotice(
+          payload?.hospital_name
+            ? `You have been moved to ${payload.hospital_name}, which can see you sooner.`
+            : "You have been moved to a centre that can see you sooner."
+        )
+      }
+      loadQueueStatus()
+    },
+  })
+
+  useEffect(() => {
+    loadQueueStatus()
+    // Poll slowly while the stream is healthy, at the original rate when it is not.
+    const interval = setInterval(loadQueueStatus, connected ? 120000 : 30000)
+    return () => clearInterval(interval)
+  }, [loadQueueStatus, connected])
 
   const handleCancel = async () => {
     if (!queueStatus || queueStatus.status !== "waiting") return
@@ -111,6 +129,17 @@ export function QueueStatusComponent({ queueId, onCancel, className }: QueueStat
     return new Date(dateStr).toLocaleString()
   }
 
+  const getLeaveBy = () => {
+    if (!queueStatus?.leave_at) return null
+    const leaveAt = new Date(queueStatus.leave_at)
+    const minutesAway = Math.round((leaveAt.getTime() - Date.now()) / 60000)
+    return {
+      time: leaveAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      minutesAway,
+      now: minutesAway <= 0,
+    }
+  }
+
   const getEstimatedTime = () => {
     if (!queueStatus?.estimated_wait_time) return "N/A"
     
@@ -157,12 +186,57 @@ export function QueueStatusComponent({ queueId, onCancel, className }: QueueStat
           <CardTitle className="flex items-center gap-2">
             {getStatusIcon(queueStatus.status)}
             Queue Status
+            {connected && (
+              <span className="ml-auto flex items-center gap-1.5 text-xs font-normal text-green-600">
+                <Radio className="h-3 w-3 animate-pulse" />
+                Live
+              </span>
+            )}
           </CardTitle>
           <CardDescription>
             Your position in the doctor's queue
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
+          {/* The point of the whole product: wait at home, leave when told. */}
+          {queueStatus.status === "waiting" && getLeaveBy() && (
+            <Alert className={getLeaveBy()!.now ? "border-orange-500 bg-orange-50 dark:bg-orange-950/20" : "border-blue-500 bg-blue-50 dark:bg-blue-950/20"}>
+              <Navigation className="h-4 w-4" />
+              <AlertDescription>
+                {getLeaveBy()!.now ? (
+                  <p className="font-medium">Leave now to arrive in time for your turn.</p>
+                ) : (
+                  <>
+                    <p className="font-medium">
+                      Leave by {getLeaveBy()!.time}
+                      <span className="font-normal text-muted-foreground">
+                        {" "}({getLeaveBy()!.minutesAway} min from now)
+                      </span>
+                    </p>
+                    <p className="text-sm text-muted-foreground mt-0.5">
+                      You can wait at home until then
+                      {queueStatus.travel_time_minutes != null
+                        ? ` — the journey takes about ${queueStatus.travel_time_minutes} min.`
+                        : "."}
+                    </p>
+                  </>
+                )}
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {/* Told, not silently moved: being re-routed without warning is worse
+              than a longer wait. */}
+          {reassignmentNotice && (
+            <Alert className="border-amber-500 bg-amber-50 dark:bg-amber-950/20">
+              <MapPin className="h-4 w-4" />
+              <AlertDescription>
+                <p className="font-medium">Your appointment moved</p>
+                <p className="text-sm">{reassignmentNotice}</p>
+              </AlertDescription>
+            </Alert>
+          )}
+
           {/* AI Summary if available */}
           {queueStatus.ai_summary && (
             <Alert className="border-l-4" style={{ borderLeftColor: getPriorityColor(queueStatus.priority) === "destructive" ? "rgb(239 68 68)" : "rgb(59 130 246)" }}>
