@@ -2,7 +2,7 @@
 
 export type AccessType = "full_access" | "prescription_only" | "reports_only" | "emergency_access";
 export type Gender = "male" | "female" | "other";
-export type TestStatus = "pending" | "in_progress" | "completed" | "cancelled";
+export type TestStatus = "requested" | "in_progress" | "completed" | "cancelled";
 export type QueueStatus = "waiting" | "in_consultation" | "completed" | "cancelled" | "no_show";
 export type QueuePriority = "low" | "normal" | "high" | "emergency";
 export type QueueType = "hospital_specific" | "cross_hospital";
@@ -232,13 +232,20 @@ export interface MedicalRecordResponse {
 }
 
 // Prescription Types
+export interface PrescriptionMedicineCreate {
+  medicine_id: number;
+  dosage: string;
+  frequency: string;
+  duration: string;
+  instructions?: string;
+  quantity_prescribed: number;
+}
+
 export interface PrescriptionCreate {
   patient_id: number;
-  medications: string;
-  dosage_instructions: string;
-  duration: string;
+  medicines: PrescriptionMedicineCreate[];
   notes?: string;
-  is_dispensed?: boolean;
+  follow_up_date?: string;
 }
 
 export interface MedicineResponse {
