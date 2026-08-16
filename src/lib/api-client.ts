@@ -391,6 +391,51 @@ export const queueApi = {
   },
 };
 
+// Diagnostics API
+export const diagnosticsApi = {
+  getRequests: async (statusFilter?: string): Promise<any[]> => {
+    const { data } = await api.get('/api/diagnostics/requests', {
+      params: statusFilter ? { status_filter: statusFilter } : undefined,
+    });
+    return data;
+  },
+
+  getStats: async (): Promise<any> => {
+    const { data } = await api.get('/api/diagnostics/stats');
+    return data;
+  },
+
+  getPatientByQR: async (accessToken: string): Promise<PatientResponse> => {
+    const { data } = await api.get(`/api/diagnostics/patient/qr/${accessToken}`);
+    return data;
+  },
+
+  getRequestsByQR: async (accessToken: string): Promise<any[]> => {
+    const { data } = await api.get(`/api/diagnostics/requests/qr/${accessToken}`);
+    return data;
+  },
+
+  updateStatus: async (reportId: number, newStatus: string): Promise<any> => {
+    const { data } = await api.patch(`/api/diagnostics/requests/${reportId}/status`, {
+      new_status: newStatus,
+    });
+    return data;
+  },
+
+  publishResults: async (
+    reportId: number,
+    results: {
+      results?: string;
+      reference_ranges?: string;
+      interpretation?: string;
+      technician_notes?: string;
+    }
+  ): Promise<any> => {
+    const { data } = await api.put(`/api/diagnostics/requests/${reportId}/results`, results);
+    return data;
+  },
+};
+
 // Live events (SSE)
 export const eventsApi = {
   // EventSource cannot send an Authorization header, so we swap the bearer
