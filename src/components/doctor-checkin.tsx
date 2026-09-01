@@ -69,7 +69,15 @@ export function DoctorCheckInComponent() {
   // API functions using real backend calls
   const fetchHospitals = async (): Promise<Hospital[]> => {
     const data = await doctorApi.getDoctorHospitals()
-    return data
+    return data.map((h) => ({
+      hospital_id: h.id,
+      hospital_name: h.name,
+      hospital_address: h.address,
+      is_checked_in: false,
+      presence_status: "offline",
+      current_queue_size: 0,
+      estimated_wait_time: 0,
+    }))
   }
 
   const fetchDoctorStatus = async (): Promise<DoctorStatus> => {

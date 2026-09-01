@@ -77,8 +77,8 @@ export default function DoctorQueueManagementPage() {
     setError(null)
     try {
       const response = await queueApi.getDoctorQueue(
-        doctorProfile.id, 
-        queueType === 'all' ? selectedHospital : selectedHospital, 
+        doctorProfile.id,
+        selectedHospital ?? undefined,
         queueType === 'all' ? undefined : queueType
       )
       setQueueData(response)

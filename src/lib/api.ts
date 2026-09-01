@@ -52,20 +52,21 @@ api.interceptors.response.use(
     }
 
     // Handle other errors
-    if (error.response?.status >= 400) {
+    if (error.response && error.response.status >= 400) {
       let message = 'An error occurred';
-      
-      if (error.response.data?.detail) {
+      const data = error.response.data as any;
+
+      if (data?.detail) {
         // Handle validation errors (array of error objects)
-        if (Array.isArray(error.response.data.detail)) {
-          message = error.response.data.detail.map((err: any) => err.msg || err.message).join(', ');
-        } else if (typeof error.response.data.detail === 'string') {
-          message = error.response.data.detail;
+        if (Array.isArray(data.detail)) {
+          message = data.detail.map((err: any) => err.msg || err.message).join(', ');
+        } else if (typeof data.detail === 'string') {
+          message = data.detail;
         } else {
           message = 'Validation error occurred';
         }
-      } else if (error.response.data?.message) {
-        message = error.response.data.message;
+      } else if (data?.message) {
+        message = data.message;
       }
       
       // Show error toast
