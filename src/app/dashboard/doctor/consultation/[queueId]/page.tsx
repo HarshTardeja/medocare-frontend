@@ -24,15 +24,13 @@ import {
   Calendar,
   Clock,
   Stethoscope,
-  Eye,
-  Download,
   FileImage,
-  Plus,
-  Save
+  Plus
 } from 'lucide-react';
 import { toast } from 'sonner';
 import Link from 'next/link';
-import { consultationApi } from '@/lib/api-client';
+import { consultationApi, queueApi } from '@/lib/api-client';
+import { documentTypeLabel, isImageDocType } from '@/lib/document-types';
 
 // Mock interfaces - replace with actual API types
 interface PatientConsent {
@@ -127,6 +125,8 @@ export default function ConsultationPage() {
   const [documents, setDocuments] = useState<MedicalDocument[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeConsent, setActiveConsent] = useState<PatientConsent | null>(null);
+  const [queueStatus, setQueueStatus] = useState<string | null>(null);
+  const [ending, setEnding] = useState(false);
 
   const breadcrumbs = [
     { title: 'Dashboard', href: '/dashboard/doctor' },
@@ -145,6 +145,14 @@ export default function ConsultationPage() {
       // Load patient data by queue ID
       const patientData = await consultationApi.getPatientByQueue(parseInt(queueId));
       setPatient(patientData);
+
+      // Queue status drives the End Session control.
+      try {
+        const qs = await queueApi.getQueueStatus(parseInt(queueId));
+        setQueueStatus(qs.status);
+      } catch (error) {
+        console.warn('Could not load queue status:', error);
+      }
 
       // Load consent data
       const consentResponse = await consultationApi.getPatientConsent(parseInt(queueId));
@@ -214,17 +222,77 @@ export default function ConsultationPage() {
   };
 
   const getDocumentIcon = (fileType: string) => {
-    return fileType === 'XRAY' || fileType === 'MRI_SCAN' ? (
+    return isImageDocType(fileType) ? (
       <FileImage className="h-4 w-4 text-blue-500" />
     ) : (
       <FileText className="h-4 w-4 text-green-500" />
     );
   };
 
-  const handleCompleteConsultation = () => {
-    // Navigate to prescription creation or complete consultation
+  const handleAddPrescription = () => {
     router.push(`/dashboard/doctor/consultation/${queueId}/prescription`);
   };
+
+  const handleEndSession = async () => {
+    if (!window.confirm('End this consultation? The patient will be marked completed and removed from the queue.')) {
+      return;
+    }
+    try {
+      setEnding(true);
+      await queueApi.updateQueueStatus(parseInt(queueId), 'completed');
+      toast.success('Consultation completed');
+      router.push('/dashboard/doctor/queue-management');
+    } catch {
+      // The axios interceptor already surfaces the server's reason (e.g. a 409
+      // if the entry is not in consultation).
+    } finally {
+      setEnding(false);
+    }
+  };
+
+  // Patient-uploaded files are routed to the tab that matches their type; the
+  // rest are grouped by type under Documents. An upload whose "home" tab is not
+  // available falls back to Documents so nothing is ever hidden.
+  const labUploads = documents.filter((d) => d.document_type === 'lab_report');
+  const rxUploads = documents.filter((d) => d.document_type === 'prescription');
+  const showLabUploads = (activeConsent?.allow_lab_reports ?? false) && labUploads.length > 0;
+  const showRxUploads = (activeConsent?.allow_prescriptions ?? false) && rxUploads.length > 0;
+  const otherUploads = documents.filter(
+    (d) =>
+      (d.document_type !== 'lab_report' || !showLabUploads) &&
+      (d.document_type !== 'prescription' || !showRxUploads),
+  );
+  const groupedOtherUploads = otherUploads.reduce<Record<string, MedicalDocument[]>>((acc, d) => {
+    (acc[d.document_type] ||= []).push(d);
+    return acc;
+  }, {});
+
+  const renderDocumentCard = (document: MedicalDocument) => (
+    <Card key={document.id}>
+      <CardContent className="p-4">
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-muted rounded-lg">
+            {getDocumentIcon(document.document_type)}
+          </div>
+          <div>
+            <p className="font-medium">{document.file_name}</p>
+            <p className="text-sm text-muted-foreground">
+              {documentTypeLabel(document.document_type)} • {document.status}
+            </p>
+            {document.description && (
+              <p className="text-sm text-muted-foreground">{document.description}</p>
+            )}
+            <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
+              {document.document_date && (
+                <span>Date: {new Date(document.document_date).toLocaleDateString()}</span>
+              )}
+              {document.doctor_name && <span>• Dr: {document.doctor_name}</span>}
+            </div>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
 
   if (loading) {
     return (
@@ -265,14 +333,21 @@ export default function ConsultationPage() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Button onClick={handleCompleteConsultation}>
+            <Button variant="outline" onClick={handleAddPrescription}>
               <Plus className="mr-2 h-4 w-4" />
               Add Prescription
             </Button>
-            <Button variant="outline">
-              <Save className="mr-2 h-4 w-4" />
-              Save Notes
-            </Button>
+            {queueStatus === 'completed' ? (
+              <Badge variant="secondary" className="gap-1 px-3 py-2">
+                <CheckCircle className="h-4 w-4" />
+                Consultation completed
+              </Badge>
+            ) : (
+              <Button onClick={handleEndSession} disabled={ending}>
+                <CheckCircle className="mr-2 h-4 w-4" />
+                {ending ? 'Ending…' : 'End Session'}
+              </Button>
+            )}
           </div>
         </div>
 
@@ -520,7 +595,14 @@ export default function ConsultationPage() {
               </TabsContent>
 
               <TabsContent value="prescriptions" className="space-y-4">
-                {prescriptions.length > 0 ? (
+                {prescriptions.length === 0 && !showRxUploads ? (
+                  <Card>
+                    <CardContent className="text-center py-8">
+                      <Pill className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
+                      <p className="text-muted-foreground">No prescriptions available</p>
+                    </CardContent>
+                  </Card>
+                ) : (
                   <div className="space-y-4">
                     {prescriptions.map((prescription) => (
                       <Card key={prescription.id}>
@@ -571,19 +653,28 @@ export default function ConsultationPage() {
                         </CardContent>
                       </Card>
                     ))}
+                    {showRxUploads && (
+                      <div className="space-y-3">
+                        <Separator />
+                        <p className="text-sm font-medium text-muted-foreground">
+                          Patient-uploaded documents
+                        </p>
+                        {rxUploads.map(renderDocumentCard)}
+                      </div>
+                    )}
                   </div>
-                ) : (
-                  <Card>
-                    <CardContent className="text-center py-8">
-                      <Pill className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
-                      <p className="text-muted-foreground">No prescriptions available</p>
-                    </CardContent>
-                  </Card>
                 )}
               </TabsContent>
 
               <TabsContent value="labs" className="space-y-4">
-                {labReports.length > 0 ? (
+                {labReports.length === 0 && !showLabUploads ? (
+                  <Card>
+                    <CardContent className="text-center py-8">
+                      <TestTube className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
+                      <p className="text-muted-foreground">No lab reports available</p>
+                    </CardContent>
+                  </Card>
+                ) : (
                   <div className="space-y-4">
                     {labReports.map((report) => (
                       <Card key={report.id}>
@@ -619,64 +710,38 @@ export default function ConsultationPage() {
                         </CardContent>
                       </Card>
                     ))}
+                    {showLabUploads && (
+                      <div className="space-y-3">
+                        <Separator />
+                        <p className="text-sm font-medium text-muted-foreground">
+                          Patient-uploaded documents
+                        </p>
+                        {labUploads.map(renderDocumentCard)}
+                      </div>
+                    )}
                   </div>
-                ) : (
-                  <Card>
-                    <CardContent className="text-center py-8">
-                      <TestTube className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
-                      <p className="text-muted-foreground">No lab reports available</p>
-                    </CardContent>
-                  </Card>
                 )}
               </TabsContent>
 
-              <TabsContent value="documents" className="space-y-4">
-                {documents.length > 0 ? (
-                  <div className="space-y-4">
-                    {documents.map((document) => (
-                      <Card key={document.id}>
-                        <CardContent className="p-4">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-3">
-                              <div className="p-2 bg-muted rounded-lg">
-                                {getDocumentIcon(document.document_type)}
-                              </div>
-                              <div>
-                                <p className="font-medium">{document.file_name}</p>
-                                <p className="text-sm text-muted-foreground">
-                                  {document.document_type.replace('_', ' ')} • {document.status}
-                                </p>
-                                {document.description && (
-                                  <p className="text-sm text-muted-foreground">{document.description}</p>
-                                )}
-                                <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
-                                  {document.document_date && (
-                                    <span>Date: {new Date(document.document_date).toLocaleDateString()}</span>
-                                  )}
-                                  {document.doctor_name && (
-                                    <span>• Dr: {document.doctor_name}</span>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <Button variant="ghost" size="sm">
-                                <Eye className="h-4 w-4" />
-                              </Button>
-                              <Button variant="ghost" size="sm">
-                                <Download className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </div>
+              <TabsContent value="documents" className="space-y-6">
+                {otherUploads.length > 0 ? (
+                  Object.entries(groupedOtherUploads).map(([type, docs]) => (
+                    <div key={type} className="space-y-3">
+                      <p className="text-sm font-medium text-muted-foreground">
+                        {documentTypeLabel(type)}
+                      </p>
+                      {docs.map(renderDocumentCard)}
+                    </div>
+                  ))
                 ) : (
                   <Card>
                     <CardContent className="text-center py-8">
                       <Upload className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
-                      <p className="text-muted-foreground">No documents available</p>
+                      <p className="text-muted-foreground">
+                        {showLabUploads || showRxUploads
+                          ? 'All uploaded documents are shown under their matching tab.'
+                          : 'No documents available'}
+                      </p>
                     </CardContent>
                   </Card>
                 )}

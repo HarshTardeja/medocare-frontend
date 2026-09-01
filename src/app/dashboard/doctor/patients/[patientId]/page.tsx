@@ -15,6 +15,7 @@ import {
   useConsentedPatientDocuments,
 } from '@/hooks/use-api';
 import { doctorApi } from '@/lib/api-client';
+import { documentTypeLabel } from '@/lib/document-types';
 import { toast } from 'sonner';
 
 const breadcrumbs = [
@@ -202,7 +203,7 @@ export default function ConsentedPatientPage() {
                           <div className="flex items-center gap-2 text-sm">
                             <FileText className="h-4 w-4 text-muted-foreground" />
                             <span className="font-medium">{d.file_name}</span>
-                            <Badge variant="outline">{d.document_type}</Badge>
+                            <Badge variant="outline">{documentTypeLabel(d.document_type)}</Badge>
                           </div>
                           <Button
                             size="sm"

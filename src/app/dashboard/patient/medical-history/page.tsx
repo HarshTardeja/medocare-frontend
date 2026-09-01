@@ -24,21 +24,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-
-const documentTypes = [
-  { value: 'lab_report', label: 'Lab Report' },
-  { value: 'xray', label: 'X-Ray' },
-  { value: 'mri_scan', label: 'MRI Scan' },
-  { value: 'ct_scan', label: 'CT Scan' },
-  { value: 'ultrasound', label: 'Ultrasound' },
-  { value: 'prescription', label: 'Prescription' },
-  { value: 'medical_certificate', label: 'Medical Certificate' },
-  { value: 'discharge_summary', label: 'Discharge Summary' },
-  { value: 'vaccination_record', label: 'Vaccination Record' },
-  { value: 'allergy_report', label: 'Allergy Report' },
-  { value: 'surgical_report', label: 'Surgical Report' },
-  { value: 'other', label: 'Other' }
-];
+import { DOCUMENT_TYPES as documentTypes, documentTypeLabel } from '@/lib/document-types';
 
 interface MedicalDocument {
   id: number;
@@ -109,9 +95,7 @@ export default function MedicalHistoryPage() {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
-  const getDocumentTypeLabel = (type: string) => {
-    return documentTypes.find(dt => dt.value === type)?.label || type;
-  };
+  const getDocumentTypeLabel = (type: string) => documentTypeLabel(type);
 
   const getStatusBadgeVariant = (status: string) => {
     switch (status) {
