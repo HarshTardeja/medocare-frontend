@@ -1,17 +1,20 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { 
-  authApi, 
-  patientApi, 
-  doctorApi, 
-  adminApi, 
-  pharmacyApi, 
-  healthApi 
+import {
+  authApi,
+  patientApi,
+  doctorApi,
+  adminApi,
+  pharmacyApi,
+  nurseApi,
+  healthApi
 } from '@/lib/api-client';
-import { 
-  LoginRequest, 
-  PatientCreate, 
-  MedicalRecordCreate, 
+import {
+  LoginRequest,
+  PatientCreate,
+  PatientUpdate,
+  FamilyDoctorRequest,
+  MedicalRecordCreate,
   PrescriptionCreate,
   QRAccessRequest,
   HospitalCreate,
@@ -73,6 +76,47 @@ export const usePatientProfile = () => {
   return useQuery({
     queryKey: ['patientProfile'],
     queryFn: patientApi.getMyProfile,
+  });
+};
+
+export const useUpdatePatientProfile = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (data: PatientUpdate) => patientApi.updateMyProfile(data),
+    onSuccess: () => {
+      toast.success('Profile updated successfully!');
+      queryClient.invalidateQueries({ queryKey: ['patientProfile'] });
+      queryClient.invalidateQueries({ queryKey: ['currentUser'] });
+    },
+    onError: (error: any) => {
+      const message = getErrorMessage(error, 'Failed to update profile');
+      toast.error(message);
+    },
+  });
+};
+
+export const useSetFamilyDoctor = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: FamilyDoctorRequest) => patientApi.setFamilyDoctor(data),
+    onSuccess: () => {
+      toast.success('Family doctor updated');
+      queryClient.invalidateQueries({ queryKey: ['patientProfile'] });
+    },
+    onError: (error: any) => toast.error(getErrorMessage(error, 'Could not set family doctor')),
+  });
+};
+
+export const useClearFamilyDoctor = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => patientApi.clearFamilyDoctor(),
+    onSuccess: () => {
+      toast.success('Family doctor removed');
+      queryClient.invalidateQueries({ queryKey: ['patientProfile'] });
+    },
+    onError: (error: any) => toast.error(getErrorMessage(error, 'Could not remove family doctor')),
   });
 };
 
@@ -296,6 +340,36 @@ export const useAllUsers = () => {
   });
 };
 
+export const useDeactivateUser = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (userId: number) => adminApi.deactivateUser(userId),
+    onSuccess: () => {
+      toast.success('User deactivated');
+      queryClient.invalidateQueries({ queryKey: ['allUsers'] });
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.detail || 'Failed to deactivate user');
+    },
+  });
+};
+
+export const useActivateUser = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (userId: number) => adminApi.activateUser(userId),
+    onSuccess: () => {
+      toast.success('User activated');
+      queryClient.invalidateQueries({ queryKey: ['allUsers'] });
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.detail || 'Failed to activate user');
+    },
+  });
+};
+
 export const useCreateHospital = () => {
   const queryClient = useQueryClient();
   
@@ -393,6 +467,14 @@ export const usePrescriptionsByQR = (accessToken: string) => {
   });
 };
 
+export const usePatientInfoByQR = (accessToken: string) => {
+  return useQuery({
+    queryKey: ['pharmacy', 'patient-info', accessToken],
+    queryFn: () => pharmacyApi.getPatientInfoByQR(accessToken),
+    enabled: !!accessToken,
+  });
+};
+
 export const useDispensePrescription = () => {
   const queryClient = useQueryClient();
   
@@ -416,3 +498,57 @@ export const useDispensedMedicines = () => {
     queryFn: pharmacyApi.getDispensedMedicines,
   });
 };
+
+// --- Dashboard stats ---
+export const useDoctorStats = () =>
+  useQuery({ queryKey: ['stats', 'doctor'], queryFn: doctorApi.getStats });
+
+export const useAdminStats = () =>
+  useQuery({ queryKey: ['stats', 'admin'], queryFn: adminApi.getStats });
+
+export const useNurseStats = () =>
+  useQuery({ queryKey: ['stats', 'nurse'], queryFn: nurseApi.getStats });
+
+export const usePharmacyStats = () =>
+  useQuery({ queryKey: ['stats', 'pharmacy'], queryFn: pharmacyApi.getStats });
+
+// --- Doctor: standing (consent-gated) access to a patient ---
+export const useConsentedPatientSummary = (patientId?: number) =>
+  useQuery({
+    queryKey: ['consentedPatient', patientId, 'summary'],
+    queryFn: () => doctorApi.getConsentedPatientSummary(patientId as number),
+    enabled: !!patientId,
+    retry: false,
+  });
+
+export const useConsentedPatientRecords = (patientId?: number) =>
+  useQuery({
+    queryKey: ['consentedPatient', patientId, 'records'],
+    queryFn: () => doctorApi.getConsentedPatientRecords(patientId as number),
+    enabled: !!patientId,
+    retry: false,
+  });
+
+export const useConsentedPatientPrescriptions = (patientId?: number) =>
+  useQuery({
+    queryKey: ['consentedPatient', patientId, 'prescriptions'],
+    queryFn: () => doctorApi.getConsentedPatientPrescriptions(patientId as number),
+    enabled: !!patientId,
+    retry: false,
+  });
+
+export const useConsentedPatientLabReports = (patientId?: number) =>
+  useQuery({
+    queryKey: ['consentedPatient', patientId, 'labs'],
+    queryFn: () => doctorApi.getConsentedPatientLabReports(patientId as number),
+    enabled: !!patientId,
+    retry: false,
+  });
+
+export const useConsentedPatientDocuments = (patientId?: number) =>
+  useQuery({
+    queryKey: ['consentedPatient', patientId, 'documents'],
+    queryFn: () => doctorApi.getConsentedPatientDocuments(patientId as number),
+    enabled: !!patientId,
+    retry: false,
+  });

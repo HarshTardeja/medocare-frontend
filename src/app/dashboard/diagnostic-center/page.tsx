@@ -46,7 +46,12 @@ interface Stats {
 
 export default function DiagnosticCenterPage() {
   const [requests, setRequests] = useState<LabRequest[]>([])
-  const [stats, setStats] = useState<Stats | null>(null)
+  const [stats, setStats] = useState<Stats>({
+    pending_requests: 0,
+    in_progress: 0,
+    completed_today: 0,
+    total_completed: 0,
+  })
   const [loading, setLoading] = useState(true)
   const [qrToken, setQrToken] = useState("")
   const [publishing, setPublishing] = useState<LabRequest | null>(null)
@@ -201,7 +206,7 @@ export default function DiagnosticCenterPage() {
           </p>
         </div>
 
-        {stats && (
+        {(
           <div className="grid gap-4 md:grid-cols-4">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between pb-2">

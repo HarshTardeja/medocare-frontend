@@ -2,348 +2,269 @@
 
 import React, { useState } from 'react';
 import { DashboardLayout } from '@/components/dashboard-layout';
+import { QrScanner } from '@/components/pharmacy/qr-scanner';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { 
-  Search, 
-  Pill, 
-  QrCode, 
-  Clock, 
-  CheckCircle, 
+import {
+  Search,
+  Camera,
+  CheckCircle,
   AlertCircle,
   User,
-  Calendar,
-  Package,
-  Truck,
-  FileText,
-  Scan,
-  ShoppingCart
+  ShieldCheck,
+  ShoppingCart,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { usePrescriptionsByUhid, usePrescriptionsByQR, useDispensePrescription, useDispensedMedicines } from '@/hooks/use-api';
+import {
+  usePrescriptionsByUhid,
+  usePrescriptionsByQR,
+  usePatientInfoByQR,
+  useDispensePrescription,
+  useDispensedMedicines,
+  usePharmacyStats,
+} from '@/hooks/use-api';
+import { PrescriptionResponse } from '@/types/api';
+
+type Method = 'uhid' | 'qr';
 
 export default function PharmacyDashboard() {
-  const [searchMethod, setSearchMethod] = useState<'uhid' | 'qr'>('uhid');
-  const [searchValue, setSearchValue] = useState('');
-  const [searchTrigger, setSearchTrigger] = useState<{ method: 'uhid' | 'qr'; value: string } | null>(null);
-  // Using sonner toast directly
+  const [method, setMethod] = useState<Method>('qr');
+  const [inputValue, setInputValue] = useState('');
+  const [scanning, setScanning] = useState(false);
+  const [query, setQuery] = useState<{ method: Method; value: string } | null>(null);
 
-  // API hooks
-  const { data: dispensedMedicines = [], isLoading: isLoadingDispensed } = useDispensedMedicines();
-  const dispenseMutation = useDispensePrescription();
-  
-  // Search hooks - only enabled when we have a search trigger
-  const { data: uhidPrescriptions = [], isLoading: isLoadingUhid, error: uhidError } = usePrescriptionsByUhid(
-    searchTrigger?.method === 'uhid' ? searchTrigger.value : ''
-  );
-  const { data: qrPrescriptions = [], isLoading: isLoadingQR, error: qrError } = usePrescriptionsByQR(
-    searchTrigger?.method === 'qr' ? searchTrigger.value : ''
-  );
-  
-  // Determine current prescriptions and loading state
-  const prescriptions = searchTrigger?.method === 'uhid' ? uhidPrescriptions : qrPrescriptions;
-  const isSearching = searchTrigger ? (searchTrigger.method === 'uhid' ? isLoadingUhid : isLoadingQR) : false;
-  const searchError = searchTrigger?.method === 'uhid' ? uhidError : qrError;
+  const dispense = useDispensePrescription();
+  const { data: stats } = usePharmacyStats();
+  const { data: dispensed = [], isLoading: dispensedLoading } = useDispensedMedicines() as {
+    data: PrescriptionResponse[];
+    isLoading: boolean;
+  };
+
+  const uhidQ = usePrescriptionsByUhid(query?.method === 'uhid' ? query.value : '');
+  const qrQ = usePrescriptionsByQR(query?.method === 'qr' ? query.value : '');
+  const patientQ = usePatientInfoByQR(query?.method === 'qr' ? query.value : '');
+
+  const active = query?.method === 'uhid' ? uhidQ : qrQ;
+  const prescriptions: PrescriptionResponse[] = active.data ?? [];
+  const searching = active.isFetching;
+  const searchError = active.error as { response?: { data?: { detail?: string } } } | null;
 
   const breadcrumbs = [
     { title: 'Dashboard', href: '/dashboard/pharmacy' },
-    { title: 'Overview' }
+    { title: 'Overview' },
   ];
 
-  const handleSearch = () => {
-    if (!searchValue.trim()) {
-      toast.error("Please enter a UHID or scan a QR code.");
+  const runSearch = (m: Method, v: string) => {
+    const value = v.trim();
+    if (!value) {
+      toast.error(m === 'uhid' ? 'Enter a UHID.' : 'Scan a QR code or paste an access token.');
       return;
     }
-
-    // Trigger the search by setting the search trigger
-    setSearchTrigger({ method: searchMethod, value: searchValue.trim() });
+    setQuery({ method: m, value });
   };
-  
-  // Handle search errors
+
   React.useEffect(() => {
     if (searchError) {
-      toast.error("Unable to search for prescriptions. Please try again.");
+      toast.error(
+        searchError.response?.data?.detail ?? 'Could not read that code. It may be expired or revoked.'
+      );
     }
   }, [searchError]);
-  
-  // Handle search results
+
   React.useEffect(() => {
-    if (searchTrigger && !isSearching && !searchError) {
-      if (prescriptions.length === 0) {
-        toast.info("No active prescriptions found for this patient.");
-      }
+    if (query && !searching && !searchError && prescriptions.length === 0) {
+      toast.info('No prescriptions found for this patient.');
     }
-  }, [searchTrigger, isSearching, searchError, prescriptions.length]);
+  }, [query, searching, searchError, prescriptions.length]);
 
-  const handleDispensePrescription = async (prescriptionId: number) => {
+  const handleDispense = async (p: PrescriptionResponse) => {
+    const names = p.medicines.map((m) => m.medicine.name).join(', ');
+    if (!window.confirm(`Dispense ${p.medicines.length} item(s) to ${p.patient_name ?? 'this patient'}?\n\n${names}`)) {
+      return;
+    }
     try {
-      await dispenseMutation.mutateAsync(prescriptionId);
-      
-      // Refresh the search results after dispensing
-      if (searchTrigger) {
-        setSearchTrigger({ ...searchTrigger });
-      }
+      await dispense.mutateAsync(p.id);
+      toast.success(`Dispensed: ${names}`);
+      if (query) setQuery({ ...query });
     } catch {
-      // Error handling is done in the mutation
+      /* mutation shows its own error toast */
     }
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status.toLowerCase()) {
-      case 'active': return 'default';
-      case 'dispensed': return 'secondary';
-      case 'expired': return 'outline';
-      default: return 'secondary';
-    }
-  };
-
-  const mockStats = {
-    totalPrescriptions: 45,
-    todayDispensed: 12,
-    pendingDispensing: 8,
-    totalRevenue: 15420
-  };
+  const patient = query?.method === 'qr' ? patientQ.data : undefined;
 
   return (
     <DashboardLayout breadcrumbs={breadcrumbs} allowedRoles={['pharmacy']}>
       <div className="space-y-6">
-        {/* Welcome Section */}
         <div>
-          <h1 className="text-3xl font-bold">Pharmacy Dashboard</h1>
+          <h1 className="text-3xl font-bold">Pharmacy</h1>
           <p className="text-muted-foreground">
-            Manage prescriptions and dispense medications to patients
+            Scan a patient&rsquo;s QR code, verify who they are, and dispense.
           </p>
         </div>
 
-        {/* Quick Stats */}
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-4 sm:grid-cols-4">
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Prescriptions</CardTitle>
-              <FileText className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
+            <CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Dispensed today</CardTitle></CardHeader>
+            <CardContent><div className="text-2xl font-bold">{stats?.today_dispensed ?? '—'}</div></CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Dispensed all-time</CardTitle></CardHeader>
+            <CardContent><div className="text-2xl font-bold">{stats?.total_prescriptions ?? '—'}</div></CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Revenue</CardTitle></CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{mockStats.totalPrescriptions}</div>
-              <p className="text-xs text-muted-foreground">
-                This month
-              </p>
+              <div className="text-2xl font-bold">
+                ₹{stats ? stats.total_revenue.toLocaleString() : '—'}
+              </div>
             </CardContent>
           </Card>
-
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Today Dispensed</CardTitle>
-              <CheckCircle className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
+            <CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Active patient</CardTitle></CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-green-600">{mockStats.todayDispensed}</div>
-              <p className="text-xs text-muted-foreground">
-                Completed today
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Pending Dispensing</CardTitle>
-              <Clock className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-orange-600">{mockStats.pendingDispensing}</div>
-              <p className="text-xs text-muted-foreground">
-                Awaiting dispensing
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Revenue</CardTitle>
-              <Package className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">₹{mockStats.totalRevenue.toLocaleString()}</div>
-              <p className="text-xs text-muted-foreground">
-                This month
-              </p>
+              <div className="text-lg font-semibold truncate">
+                {patient ? `${patient.first_name} ${patient.last_name}` : '—'}
+              </div>
             </CardContent>
           </Card>
         </div>
 
         <Tabs defaultValue="search" className="space-y-6">
           <TabsList>
-            <TabsTrigger value="search">Search Prescriptions</TabsTrigger>
-            <TabsTrigger value="dispensed">Dispensed History</TabsTrigger>
+            <TabsTrigger value="search" id="search">Find prescriptions</TabsTrigger>
+            <TabsTrigger value="dispensed" id="dispensed">Dispensed history</TabsTrigger>
           </TabsList>
 
           <TabsContent value="search" className="space-y-6">
-            {/* Search Section */}
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <Search className="h-5 w-5" />
-                  Find Patient Prescriptions
+                  <Search className="h-5 w-5" /> Look up a patient
                 </CardTitle>
-                <CardDescription>
-                  Search for patient prescriptions using UHID or QR code
-                </CardDescription>
+                <CardDescription>By patient-issued QR code, or by UHID for a walk-in.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="flex items-center gap-4">
-                  <div className="flex items-center space-x-2">
-                    <input
-                      type="radio"
-                      id="uhid-search"
-                      name="search-method"
-                      checked={searchMethod === 'uhid'}
-                      onChange={() => setSearchMethod('uhid')}
-                    />
-                    <Label htmlFor="uhid-search">UHID Search</Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <input
-                      type="radio"
-                      id="qr-search"
-                      name="search-method"
-                      checked={searchMethod === 'qr'}
-                      onChange={() => setSearchMethod('qr')}
-                    />
-                    <Label htmlFor="qr-search">QR Code</Label>
-                  </div>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant={method === 'qr' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setMethod('qr')}
+                  >
+                    QR token
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={method === 'uhid' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => { setMethod('uhid'); setScanning(false); }}
+                  >
+                    UHID
+                  </Button>
                 </div>
 
-                <div className="flex gap-4">
+                {scanning && method === 'qr' && (
+                  <QrScanner
+                    onClose={() => setScanning(false)}
+                    onDecoded={(text) => {
+                      setScanning(false);
+                      setInputValue(text);
+                      runSearch('qr', text);
+                    }}
+                  />
+                )}
+
+                <div className="flex flex-col gap-2 sm:flex-row">
                   <div className="flex-1">
+                    <Label htmlFor="lookup" className="sr-only">
+                      {method === 'uhid' ? 'UHID' : 'Access token'}
+                    </Label>
                     <Input
-                      placeholder={searchMethod === 'uhid' ? 'Enter UHID (e.g., UH123456)' : 'Scan QR code or enter access token'}
-                      value={searchValue}
-                      onChange={(e) => setSearchValue(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+                      id="lookup"
+                      placeholder={method === 'uhid' ? 'UHID, e.g. ML2500000003' : 'Paste access token'}
+                      value={inputValue}
+                      onChange={(e) => setInputValue(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && runSearch(method, inputValue)}
                     />
                   </div>
-                  <Button onClick={handleSearch} disabled={isSearching}>
-                    {isSearching ? (
-                      <>
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                        Searching...
-                      </>
-                    ) : searchMethod === 'uhid' ? (
-                      <>
-                        <Search className="mr-2 h-4 w-4" />
-                        Search
-                      </>
-                    ) : (
-                      <>
-                        <Scan className="mr-2 h-4 w-4" />
-                        Scan
-                      </>
+                  <div className="flex gap-2">
+                    {method === 'qr' && (
+                      <Button type="button" variant="outline" onClick={() => setScanning((s) => !s)}>
+                        <Camera className="mr-2 h-4 w-4" />
+                        {scanning ? 'Stop' : 'Scan'}
+                      </Button>
                     )}
-                  </Button>
+                    <Button onClick={() => runSearch(method, inputValue)} disabled={searching}>
+                      <Search className="mr-2 h-4 w-4" />
+                      {searching ? 'Searching…' : 'Search'}
+                    </Button>
+                  </div>
                 </div>
               </CardContent>
             </Card>
 
-            {/* Search Results */}
-            {prescriptions.length > 0 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Pill className="h-5 w-5" />
-                    Prescriptions Found ({prescriptions.length})
+            {patient && (
+              <Card className="border-primary/30">
+                <CardHeader className="pb-3">
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <ShieldCheck className="h-5 w-5 text-primary" /> Verify patient identity
                   </CardTitle>
-                  <CardDescription>
-                    Active prescriptions for the searched patient
-                  </CardDescription>
                 </CardHeader>
-                <CardContent>
-                  <div className="space-y-6">
-                    {prescriptions.map((prescription) => (
-                      <div key={prescription.id} className="border rounded-lg p-4 space-y-4">
-                        {/* Prescription Header */}
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <h3 className="font-semibold">
-                                {prescription.patient ? 
-                                  `${prescription.patient.first_name} ${prescription.patient.last_name}` : 
-                                  'Unknown Patient'
-                                }
-                              </h3>
-                              <Badge variant="outline">{prescription.patient?.uhid || 'No UHID'}</Badge>
-                              <Badge variant={getStatusColor(prescription.status)}>
-                                {prescription.status.toUpperCase()}
-                              </Badge>
-                            </div>
-                            <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                              <span>Dr. {prescription.doctor?.user?.full_name || 'Unknown Doctor'}</span>
-                              <span>•</span>
-                              <span>{new Date(prescription.prescription_date).toLocaleDateString()}</span>
-                            </div>
-                          </div>
-                          {prescription.status.toLowerCase() === 'active' && (
-                            <Button
-                              onClick={() => handleDispensePrescription(prescription.id)}
-                              disabled={dispenseMutation.isPending}
-                            >
-                              {dispenseMutation.isPending ? (
-                                <>
-                                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                                  Dispensing...
-                                </>
-                              ) : (
-                                <>
-                                  <ShoppingCart className="mr-2 h-4 w-4" />
-                                  Dispense
-                                </>
-                              )}
-                            </Button>
-                          )}
-                        </div>
-
-                        {/* Medicines List */}
-                        <div className="space-y-3">
-                          <h4 className="font-medium">Prescribed Medicines:</h4>
-                          {prescription.medicines.map((medicine, index) => (
-                            <div key={index} className="bg-muted rounded-lg p-3">
-                              <div className="grid grid-cols-1 md:grid-cols-4 gap-2 text-sm">
-                                <div>
-                                  <p className="font-medium">{medicine.medicine.name}</p>
-                                  <p className="text-muted-foreground">Qty: {medicine.quantity_prescribed}</p>
-                                </div>
-                                <div>
-                                  <p className="font-medium">Dosage</p>
-                                  <p className="text-muted-foreground">{medicine.dosage}</p>
-                                </div>
-                                <div>
-                                  <p className="font-medium">Duration</p>
-                                  <p className="text-muted-foreground">{medicine.duration}</p>
-                                </div>
-                                <div>
-                                  <p className="font-medium">Instructions</p>
-                                  <p className="text-muted-foreground">{medicine.instructions || 'None'}</p>
-                                </div>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-
-                        {/* Notes */}
-                        {prescription.notes && (
-                          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                            <p className="font-medium text-blue-800 mb-1">Doctor's Notes:</p>
-                            <p className="text-blue-700 text-sm">{prescription.notes}</p>
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
+                <CardContent className="grid gap-3 text-sm sm:grid-cols-2">
+                  <Field label="Name" value={`${patient.first_name} ${patient.last_name}`} />
+                  <Field label="UHID" value={patient.uhid} mono />
+                  <Field label="Date of birth" value={patient.date_of_birth} />
+                  <Field label="Blood group" value={patient.blood_group || '—'} />
+                  <Field label="Allergies" value={patient.medical_allergies || 'None recorded'} />
+                  <Field label="Chronic conditions" value={patient.chronic_conditions || 'None recorded'} />
                 </CardContent>
               </Card>
+            )}
+
+            {prescriptions.length > 0 && (
+              <div className="space-y-4">
+                {prescriptions.map((p) => (
+                  <Card key={p.id}>
+                    <CardHeader className="pb-3">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="flex items-center gap-1 font-semibold">
+                              <User className="h-4 w-4" /> {p.patient_name ?? 'Unknown patient'}
+                            </span>
+                            {p.patient_uhid && <Badge variant="outline">{p.patient_uhid}</Badge>}
+                            <Badge variant={p.status === 'active' ? 'default' : 'secondary'}>
+                              {p.status.toUpperCase()}
+                            </Badge>
+                          </div>
+                          <p className="mt-1 text-sm text-muted-foreground">
+                            Dr. {p.doctor_name ?? 'Unknown'} · {new Date(p.prescription_date).toLocaleDateString()}
+                          </p>
+                        </div>
+                        {p.status === 'active' && (
+                          <Button onClick={() => handleDispense(p)} disabled={dispense.isPending}>
+                            <ShoppingCart className="mr-2 h-4 w-4" />
+                            {dispense.isPending ? 'Dispensing…' : 'Dispense'}
+                          </Button>
+                        )}
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <MedicineList prescription={p} />
+                      {p.notes && (
+                        <p className="mt-3 rounded-md bg-muted p-3 text-sm">
+                          <span className="font-medium">Doctor&rsquo;s notes: </span>{p.notes}
+                        </p>
+                      )}
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
             )}
           </TabsContent>
 
@@ -351,52 +272,34 @@ export default function PharmacyDashboard() {
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <CheckCircle className="h-5 w-5" />
-                  Dispensed Medicines History
+                  <CheckCircle className="h-5 w-5" /> Dispensed history
                 </CardTitle>
-                <CardDescription>
-                  Recently dispensed medications and transactions
-                </CardDescription>
+                <CardDescription>Prescriptions this pharmacy has handed over.</CardDescription>
               </CardHeader>
               <CardContent>
-                {isLoadingDispensed ? (
-                  <div className="flex items-center justify-center py-8">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                {dispensedLoading ? (
+                  <div className="flex justify-center py-8">
+                    <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-primary" />
                   </div>
-                ) : dispensedMedicines.length > 0 ? (
+                ) : dispensed.length === 0 ? (
+                  <p className="py-8 text-center text-muted-foreground">Nothing dispensed yet.</p>
+                ) : (
                   <div className="space-y-4">
-                    {dispensedMedicines.map((item) => (
-                      <div key={item.id} className="border rounded-lg p-4">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <p className="font-medium">{item.medicine_name}</p>
-                              <Badge variant="outline">Qty: {item.quantity_dispensed}</Badge>
-                            </div>
-                            <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                              <span>{item.patient_name} ({item.patient_uhid})</span>
-                              <span>•</span>
-                              <span>{new Date(item.dispensed_date).toLocaleString()}</span>
-                            </div>
-                          </div>
-                          <div className="text-right">
-                            <p className="font-medium">₹{item.total_price}</p>
-                            <Badge variant="secondary">
-                              <CheckCircle className="w-3 h-3 mr-1" />
-                              Dispensed
-                            </Badge>
-                          </div>
+                    {dispensed.map((p) => (
+                      <div key={p.id} className="rounded-lg border p-4">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <span className="font-medium">
+                            {p.patient_name ?? 'Unknown'}{' '}
+                            <span className="font-normal text-muted-foreground">{p.patient_uhid}</span>
+                          </span>
+                          <span className="text-sm text-muted-foreground">
+                            {p.dispensed_at ? new Date(p.dispensed_at).toLocaleString() : '—'}
+                          </span>
                         </div>
+                        <p className="text-sm text-muted-foreground">Dr. {p.doctor_name ?? 'Unknown'}</p>
+                        <MedicineList prescription={p} compact />
                       </div>
                     ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-8">
-                    <Truck className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
-                    <h3 className="text-lg font-medium mb-2">No dispensed medicines</h3>
-                    <p className="text-muted-foreground">
-                      Dispensed medications will appear here
-                    </p>
                   </div>
                 )}
               </CardContent>
@@ -404,26 +307,59 @@ export default function PharmacyDashboard() {
           </TabsContent>
         </Tabs>
 
-        {/* Information Card */}
-        <Card className="border-blue-200 bg-blue-50">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-blue-800">
-              <AlertCircle className="h-5 w-5" />
-              Pharmacy Guidelines
+        <Card className="border-amber-300/60 bg-amber-50 dark:border-amber-500/30 dark:bg-amber-950/20">
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <AlertCircle className="h-5 w-5" /> Before you dispense
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <ul className="space-y-2 text-blue-700 text-sm">
-              <li>• Always verify patient identity before dispensing medications</li>
-              <li>• Check prescription validity and doctor's digital signature</li>
-              <li>• Ensure proper storage and handling of medications</li>
-              <li>• Provide clear instructions to patients about medication usage</li>
-              <li>• Report any suspicious prescriptions or activities</li>
-              <li>• Maintain accurate records of all dispensed medications</li>
+            <ul className="space-y-1.5 text-sm">
+              <li>Confirm the patient&rsquo;s name and UHID against a photo ID.</li>
+              <li>Check the prescription is still <code>ACTIVE</code> — dispensing burns it.</li>
+              <li>Counsel the patient on dosage and instructions before they leave.</li>
             </ul>
           </CardContent>
         </Card>
       </div>
     </DashboardLayout>
+  );
+}
+
+function Field({ label, value, mono }: { label: string; value?: string; mono?: boolean }) {
+  return (
+    <div className="grid gap-0.5">
+      <span className="text-xs uppercase tracking-wide text-muted-foreground">{label}</span>
+      <span className={mono ? 'font-mono' : ''}>{value}</span>
+    </div>
+  );
+}
+
+function MedicineList({ prescription, compact }: { prescription: PrescriptionResponse; compact?: boolean }) {
+  return (
+    <div className={compact ? 'mt-2 space-y-1' : 'mt-1 space-y-2'}>
+      {prescription.medicines.map((m) => (
+        <div
+          key={m.id}
+          className={
+            compact
+              ? 'text-sm'
+              : 'grid gap-1 rounded-md bg-muted p-3 text-sm md:grid-cols-4'
+          }
+        >
+          <div>
+            <span className="font-medium">{m.medicine.name}</span>
+            <span className="text-muted-foreground"> · qty {m.quantity_prescribed}</span>
+          </div>
+          {!compact && (
+            <>
+              <div><span className="text-muted-foreground">Dosage: </span>{m.dosage}</div>
+              <div><span className="text-muted-foreground">Duration: </span>{m.duration}</div>
+              <div><span className="text-muted-foreground">Notes: </span>{m.instructions || '—'}</div>
+            </>
+          )}
+        </div>
+      ))}
+    </div>
   );
 }

@@ -3,12 +3,13 @@
 import { DashboardLayout } from '@/components/dashboard-layout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { 
-  useHospitals, 
-  useDoctors, 
-  usePharmacies, 
+import {
+  useHospitals,
+  useDoctors,
+  usePharmacies,
   useDiagnosticCenters,
-  useAllUsers 
+  useAllUsers,
+  useAdminStats
 } from '@/hooks/use-api';
 import { 
   Building2, 
@@ -29,6 +30,7 @@ export default function AdminDashboard() {
   const { data: pharmacies = [], isLoading: pharmaciesLoading } = usePharmacies();
   const { data: diagnosticCenters = [], isLoading: centersLoading } = useDiagnosticCenters();
   const { data: users = [], isLoading: usersLoading } = useAllUsers();
+  const { data: stats } = useAdminStats();
 
   const breadcrumbs = [
     { title: 'Dashboard', href: '/dashboard/admin' },
@@ -93,27 +95,23 @@ export default function AdminDashboard() {
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Doctors</CardTitle>
+              <CardTitle className="text-sm font-medium">Consultations Today</CardTitle>
               <Stethoscope className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{doctors.length}</div>
-              <p className="text-xs text-muted-foreground">
-                Active doctors
-              </p>
+              <div className="text-2xl font-bold">{stats?.consultations_today ?? '—'}</div>
+              <p className="text-xs text-muted-foreground">Completed across all centres</p>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">System Health</CardTitle>
+              <CardTitle className="text-sm font-medium">Patients Waiting</CardTitle>
               <Shield className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-green-600">Good</div>
-              <p className="text-xs text-muted-foreground">
-                All systems operational
-              </p>
+              <div className="text-2xl font-bold">{stats?.patients_waiting ?? '—'}</div>
+              <p className="text-xs text-muted-foreground">In queues right now</p>
             </CardContent>
           </Card>
         </div>
@@ -241,12 +239,13 @@ export default function AdminDashboard() {
                   <span className="text-sm font-medium">{totalProviders}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-sm">System Uptime</span>
-                  <span className="text-sm font-medium text-green-600">99.9%</span>
+                  <span className="text-sm">New sign-ups this week</span>
+                  <span className="text-sm font-medium">{stats?.registrations_this_week ?? '—'}</span>
                 </div>
-                <Button asChild variant="ghost" className="w-full">
-                  <Link href="/dashboard/admin/reports">View Detailed Reports</Link>
-                </Button>
+                <div className="flex justify-between">
+                  <span className="text-sm">Patients waiting now</span>
+                  <span className="text-sm font-medium">{stats?.patients_waiting ?? '—'}</span>
+                </div>
               </div>
             </CardContent>
           </Card>

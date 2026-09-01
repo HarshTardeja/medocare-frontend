@@ -4,7 +4,7 @@ import { DashboardLayout } from '@/components/dashboard-layout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { useDoctorPatients } from '@/hooks/use-api';
+import { useDoctorPatients, useDoctorStats } from '@/hooks/use-api';
 import { Users, Calendar, FileText, Pill, Clock, Plus, LogIn, MapPin, Stethoscope, List } from 'lucide-react';
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
@@ -13,6 +13,7 @@ import { useRouter } from 'next/navigation';
 
 export default function DoctorDashboard() {
   const { data: patients = [], isLoading } = useDoctorPatients();
+  const { data: stats } = useDoctorStats();
   const router = useRouter();
   const [queueData, setQueueData] = useState<any>(null);
   const [doctorProfile, setDoctorProfile] = useState<any>(null);
@@ -53,10 +54,6 @@ export default function DoctorDashboard() {
     );
   }
 
-  const todayAppointments = 8; // Mock data
-  const pendingReports = 5; // Mock data
-  const activePrescriptions = 12; // Mock data
-  
   const waitingPatients = queueData?.queue?.filter((q: any) => q.status === "waiting") || [];
   const inConsultation = queueData?.queue?.filter((q: any) => q.status === "in_consultation") || [];
   const currentPatient = inConsultation.length > 0 ? inConsultation[0] : null;
@@ -82,23 +79,19 @@ export default function DoctorDashboard() {
               <Users className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{patients.length}</div>
-              <p className="text-xs text-muted-foreground">
-                Under your care
-              </p>
+              <div className="text-2xl font-bold">{stats?.total_patients ?? patients.length}</div>
+              <p className="text-xs text-muted-foreground">Under your care</p>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Today's Appointments</CardTitle>
+              <CardTitle className="text-sm font-medium">Consultations Today</CardTitle>
               <Calendar className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{todayAppointments}</div>
-              <p className="text-xs text-muted-foreground">
-                Scheduled for today
-              </p>
+              <div className="text-2xl font-bold">{stats?.today_consultations ?? '—'}</div>
+              <p className="text-xs text-muted-foreground">Completed today</p>
             </CardContent>
           </Card>
 
@@ -108,10 +101,8 @@ export default function DoctorDashboard() {
               <FileText className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{pendingReports}</div>
-              <p className="text-xs text-muted-foreground">
-                Awaiting review
-              </p>
+              <div className="text-2xl font-bold">{stats?.pending_reports ?? '—'}</div>
+              <p className="text-xs text-muted-foreground">Lab reports awaiting review</p>
             </CardContent>
           </Card>
 
@@ -121,10 +112,8 @@ export default function DoctorDashboard() {
               <Pill className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{activePrescriptions}</div>
-              <p className="text-xs text-muted-foreground">
-                Currently active
-              </p>
+              <div className="text-2xl font-bold">{stats?.active_prescriptions ?? '—'}</div>
+              <p className="text-xs text-muted-foreground">You have written</p>
             </CardContent>
           </Card>
         </div>
@@ -318,35 +307,31 @@ export default function DoctorDashboard() {
           <Card>
             <CardHeader>
               <CardTitle>Today's Schedule</CardTitle>
-              <CardDescription>Your appointments for today</CardDescription>
+              <CardDescription>Your clinics for today</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-3">
-                <div className="flex items-center gap-3">
-                  <Clock className="h-4 w-4 text-muted-foreground" />
-                  <div>
-                    <p className="font-medium">9:00 AM - John Doe</p>
-                    <p className="text-sm text-muted-foreground">General Consultation</p>
-                  </div>
+              {stats && stats.upcoming_schedule.length > 0 ? (
+                <div className="space-y-3">
+                  {stats.upcoming_schedule.map((slot, i) => (
+                    <div key={i} className="flex items-center gap-3">
+                      <Clock className="h-4 w-4 text-muted-foreground" />
+                      <div>
+                        <p className="font-medium">
+                          {slot.start_time}–{slot.end_time} · {slot.hospital_name}
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          {slot.patient_count} patient{slot.patient_count === 1 ? '' : 's'} waiting
+                        </p>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-                <div className="flex items-center gap-3">
-                  <Clock className="h-4 w-4 text-muted-foreground" />
-                  <div>
-                    <p className="font-medium">10:30 AM - Jane Smith</p>
-                    <p className="text-sm text-muted-foreground">Follow-up Visit</p>
-                  </div>
+              ) : (
+                <div className="py-6 text-center text-muted-foreground">
+                  <Clock className="mx-auto h-8 w-8 mb-2" />
+                  <p>No scheduled clinics today.</p>
                 </div>
-                <div className="flex items-center gap-3">
-                  <Clock className="h-4 w-4 text-muted-foreground" />
-                  <div>
-                    <p className="font-medium">2:00 PM - Bob Johnson</p>
-                    <p className="text-sm text-muted-foreground">Routine Checkup</p>
-                  </div>
-                </div>
-                <Button asChild variant="ghost" className="w-full">
-                  <Link href="/dashboard/doctor/appointments">View Full Schedule</Link>
-                </Button>
-              </div>
+              )}
             </CardContent>
           </Card>
         </div>

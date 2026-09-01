@@ -8,7 +8,6 @@ import {
   FileText,
   Pill,
   TestTube,
-  Settings,
   Users,
   Building2,
   Stethoscope,
@@ -16,7 +15,6 @@ import {
   QrCode,
   BarChart3,
   CreditCard,
-  Shield,
   ClipboardList,
   LogIn,
 } from "lucide-react"
@@ -208,16 +206,6 @@ const getNavigationData = (userRole: string, user: any) => {
               },
             ],
           },
-          {
-            title: "Reports",
-            url: "/dashboard/admin/reports",
-            icon: FileText,
-          },
-          {
-            title: "Settings",
-            url: "/dashboard/admin/settings",
-            icon: Settings,
-          },
         ],
         projects: [],
       };
@@ -233,29 +221,14 @@ const getNavigationData = (userRole: string, user: any) => {
             isActive: true,
           },
           {
-            title: "Prescription Lookup",
-            url: "/dashboard/pharmacy/prescriptions",
+            title: "Find prescriptions",
+            url: "/dashboard/pharmacy#search",
             icon: Pill,
-            items: [
-              {
-                title: "Search by UHID",
-                url: "/dashboard/pharmacy/prescriptions/search",
-              },
-              {
-                title: "QR Code Scanner",
-                url: "/dashboard/pharmacy/prescriptions/qr-scanner",
-              },
-            ],
           },
           {
-            title: "Dispensed Medicines",
-            url: "/dashboard/pharmacy/dispensed",
+            title: "Dispensed history",
+            url: "/dashboard/pharmacy#dispensed",
             icon: CreditCard,
-          },
-          {
-            title: "Inventory",
-            url: "/dashboard/pharmacy/inventory",
-            icon: Shield,
           },
         ],
         projects: [],
@@ -272,19 +245,38 @@ const getNavigationData = (userRole: string, user: any) => {
             isActive: true,
           },
           {
-            title: "Patient Care",
-            url: "/dashboard/nurse/patients",
+            title: "Patient Lookup",
+            url: "/dashboard/nurse#patient-lookup",
             icon: UserCheck,
           },
           {
-            title: "Appointments",
-            url: "/dashboard/nurse/appointments",
-            icon: Calendar,
+            title: "Doctor Queues",
+            url: "/dashboard/nurse#doctor-queues",
+            icon: ClipboardList,
+          },
+        ],
+        projects: [],
+      };
+
+    case 'diagnostic_center':
+      return {
+        ...baseData,
+        navMain: [
+          {
+            title: "Dashboard",
+            url: "/dashboard/diagnostic-center",
+            icon: BarChart3,
+            isActive: true,
           },
           {
-            title: "Reports",
-            url: "/dashboard/nurse/reports",
-            icon: FileText,
+            title: "Request Queue",
+            url: "/dashboard/diagnostic-center#requests",
+            icon: ClipboardList,
+          },
+          {
+            title: "QR Lookup",
+            url: "/dashboard/diagnostic-center#qr-lookup",
+            icon: QrCode,
           },
         ],
         projects: [],

@@ -37,6 +37,9 @@ export default function PatientDashboard() {
   const activePrescriptions = prescriptions.filter(p => p.status === 'active');
   const recentLabReports = labReports.slice(0, 3);
   const recentMedicalRecords = medicalRecords.slice(0, 3);
+  const upcomingFollowUps = prescriptions.filter(
+    p => p.follow_up_date && new Date(p.follow_up_date) > new Date()
+  ).length;
 
   return (
     <DashboardLayout breadcrumbs={breadcrumbs} allowedRoles={['patient']}>
@@ -99,13 +102,13 @@ export default function PatientDashboard() {
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Health Score</CardTitle>
+              <CardTitle className="text-sm font-medium">Upcoming Follow-ups</CardTitle>
               <Heart className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">Good</div>
+              <div className="text-2xl font-bold">{upcomingFollowUps}</div>
               <p className="text-xs text-muted-foreground">
-                Based on recent data
+                Scheduled by your doctors
               </p>
             </CardContent>
           </Card>

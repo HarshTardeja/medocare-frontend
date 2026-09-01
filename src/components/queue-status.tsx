@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { queueApi } from "@/lib/api-client"
+import { ConsultationAccessButton } from "@/components/consultation-access-button"
 import { useQueueEvents } from "@/hooks/use-queue-events"
 import { QueueStatusResponse, QueueStatus, QueuePriority } from "@/types/api"
 
@@ -405,17 +406,26 @@ export function QueueStatusComponent({ queueId, onCancel, className }: QueueStat
               Refresh Status
             </Button>
 
-            {queueStatus.status === "waiting" && (
-              <Button
-                variant="destructive"
-                onClick={handleCancel}
-                disabled={cancelling}
-                size="sm"
-              >
-                {cancelling && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Cancel Queue
-              </Button>
-            )}
+            <div className="flex items-center gap-2">
+              <ConsultationAccessButton
+                queueId={queueId}
+                doctorId={queueStatus.doctor_id}
+                doctorName={queueStatus.doctor_name}
+                status={queueStatus.status}
+              />
+
+              {queueStatus.status === "waiting" && (
+                <Button
+                  variant="destructive"
+                  onClick={handleCancel}
+                  disabled={cancelling}
+                  size="sm"
+                >
+                  {cancelling && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Cancel Queue
+                </Button>
+              )}
+            </div>
           </div>
 
           {/* Auto-refresh indicator */}

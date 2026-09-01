@@ -5,6 +5,12 @@ import {
   UserResponse, 
   PatientCreate,
   PatientResponse,
+  PatientUpdate,
+  FamilyDoctorRequest,
+  DoctorStatsResponse,
+  AdminStatsResponse,
+  NurseStatsResponse,
+  PharmacyStatsResponse,
   DoctorResponse,
   MedicalRecordResponse,
   PrescriptionResponse,
@@ -80,6 +86,21 @@ export const patientApi = {
   
   getPatientByUhid: async (uhid: string): Promise<PatientResponse> => {
     const { data } = await api.get(`/api/patients/${uhid}`);
+    return data;
+  },
+
+  updateMyProfile: async (body: PatientUpdate): Promise<PatientResponse> => {
+    const { data } = await api.patch('/api/patients/me', body);
+    return data;
+  },
+
+  setFamilyDoctor: async (body: FamilyDoctorRequest): Promise<PatientResponse> => {
+    const { data } = await api.put('/api/patients/me/family-doctor', body);
+    return data;
+  },
+
+  clearFamilyDoctor: async (): Promise<PatientResponse> => {
+    const { data } = await api.delete('/api/patients/me/family-doctor');
     return data;
   },
   
@@ -178,6 +199,50 @@ export const doctorApi = {
     return data;
   },
 
+  getStats: async (): Promise<DoctorStatsResponse> => {
+    const { data } = await api.get('/api/doctor/stats');
+    return data;
+  },
+
+  // Standing (consent-gated) access to a patient outside a consultation.
+  getConsentedPatientSummary: async (patientId: number): Promise<PatientResponse> => {
+    const { data } = await api.get(`/api/doctor/patients/id/${patientId}/summary`);
+    return data;
+  },
+  getConsentedPatientRecords: async (patientId: number): Promise<any[]> => {
+    const { data } = await api.get(`/api/doctor/patients/id/${patientId}/medical-records`);
+    return data;
+  },
+  getConsentedPatientPrescriptions: async (patientId: number): Promise<any[]> => {
+    const { data } = await api.get(`/api/doctor/patients/id/${patientId}/prescriptions`);
+    return data;
+  },
+  getConsentedPatientLabReports: async (patientId: number): Promise<any[]> => {
+    const { data } = await api.get(`/api/doctor/patients/id/${patientId}/lab-reports`);
+    return data;
+  },
+  getConsentedPatientDocuments: async (patientId: number): Promise<any[]> => {
+    const { data } = await api.get(`/api/doctor/patients/id/${patientId}/documents`);
+    return data;
+  },
+  downloadConsentedDocument: async (
+    patientId: number,
+    documentId: number,
+    fileName: string
+  ): Promise<void> => {
+    // Axios sends the bearer token and follows the 302 to the presigned URL.
+    const res = await api.get(
+      `/api/doctor/patients/id/${patientId}/documents/${documentId}/download`,
+      { responseType: 'blob' }
+    );
+    const url = URL.createObjectURL(res.data as Blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName || 'document';
+    a.click();
+    URL.revokeObjectURL(url);
+  },
+
   // Check-in/Check-out functionality
   getDoctorHospitals: async (): Promise<HospitalResponse[]> => {
     const { data } = await api.get('/api/doctor/hospitals');
@@ -265,6 +330,11 @@ export const adminApi = {
     return data;
   },
   
+  getStats: async (): Promise<AdminStatsResponse> => {
+    const { data } = await api.get('/api/admin/stats');
+    return data;
+  },
+
   // Users
   getAllUsers: async (): Promise<UserResponse[]> => {
     const { data } = await api.get('/api/admin/users');
@@ -303,6 +373,19 @@ export const pharmacyApi = {
   
   getPatientInfoByQR: async (accessToken: string): Promise<any> => {
     const { data } = await api.get(`/api/pharmacy/patient-info/qr/${accessToken}`);
+    return data;
+  },
+
+  getStats: async (): Promise<PharmacyStatsResponse> => {
+    const { data } = await api.get('/api/pharmacy/stats');
+    return data;
+  },
+};
+
+// Nurse API
+export const nurseApi = {
+  getStats: async (): Promise<NurseStatsResponse> => {
+    const { data } = await api.get('/api/nurse/stats');
     return data;
   },
 };

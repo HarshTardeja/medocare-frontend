@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { DashboardLayout } from "@/components/dashboard-layout"
 import { QueueStatusComponent } from "@/components/queue-status"
+import { ConsultationAccessButton } from "@/components/consultation-access-button"
 import { queueApi } from "@/lib/api-client"
 import { QueueStatusResponse } from "@/types/api"
 
@@ -238,8 +239,21 @@ export default function MyQueuesPage() {
                     </Alert>
                   )}
 
-                  <div className="flex justify-end">
-                    <Button variant="outline" size="sm">
+                  <div
+                    className="flex justify-between items-center gap-2"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <ConsultationAccessButton
+                      queueId={queue.queue_id}
+                      doctorId={queue.doctor_id}
+                      doctorName={queue.doctor_name}
+                      status={queue.status}
+                    />
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setSelectedQueue(queue.queue_id)}
+                    >
                       View Details →
                     </Button>
                   </div>

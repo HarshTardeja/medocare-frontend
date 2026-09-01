@@ -8,6 +8,54 @@ export type QueuePriority = "low" | "normal" | "high" | "emergency";
 export type QueueType = "hospital_specific" | "cross_hospital";
 export type DoctorAvailabilityStatus = "available" | "busy" | "break" | "offline" | "emergency";
 
+// Dashboard stats
+export interface UpcomingScheduleEntry {
+  hospital_name: string;
+  start_time: string;
+  end_time: string;
+  patient_count: number;
+}
+
+export interface DoctorStatsResponse {
+  today_consultations: number;
+  current_queue_size: number;
+  avg_consultation_time: number;
+  total_wait_time_saved: number;
+  patient_satisfaction: number | null;
+  upcoming_schedule: UpcomingScheduleEntry[];
+  pending_reports: number;
+  active_prescriptions: number;
+  total_patients: number;
+}
+
+export interface PharmacyStatsResponse {
+  total_prescriptions: number;
+  today_dispensed: number;
+  total_revenue: number;
+}
+
+export interface AdminStatsResponse {
+  total_users: number;
+  active_users: number;
+  patients: number;
+  doctors: number;
+  nurses: number;
+  pharmacies: number;
+  hospitals: number;
+  diagnostic_centers: number;
+  consultations_today: number;
+  patients_waiting: number;
+  registrations_this_week: number;
+}
+
+export interface NurseStatsResponse {
+  patients_waiting: number;
+  in_consultation: number;
+  emergency_waiting: number;
+  doctors_on_duty: number;
+  completed_today: number;
+}
+
 // Authentication Types
 export interface LoginRequest {
   email: string;
@@ -62,9 +110,33 @@ export interface PatientCreate {
   medical_history?: string;
 }
 
+// Self-service profile edit — every field optional, identity fields excluded.
+export interface PatientUpdate {
+  first_name?: string;
+  last_name?: string;
+  phone?: string;
+  address?: string;
+  blood_group?: string;
+  emergency_contact_name?: string;
+  emergency_contact_phone?: string;
+  medical_allergies?: string;
+  chronic_conditions?: string;
+}
+
+export interface FamilyDoctorRequest {
+  doctor_id: number;
+  allow_medical_history: boolean;
+  allow_lab_reports: boolean;
+  allow_prescriptions: boolean;
+  allow_uploaded_documents: boolean;
+}
+
 export interface PatientResponse {
   id: number;
   uhid: string;
+  family_doctor_id?: number | null;
+  family_doctor_name?: string | null;
+  is_family_patient?: boolean;
   first_name: string;
   last_name: string;
   date_of_birth: string;
@@ -104,6 +176,11 @@ export interface DoctorResponse {
   is_active: boolean;
   created_at: string;
   updated_at: string;
+  // The admin list endpoint (/api/admin/doctors) flattens these onto the row
+  // instead of nesting user/hospital.
+  hospital_id?: number;
+  full_name?: string;
+  email?: string;
   user: UserResponse;
   hospital: HospitalResponse;
 }
@@ -286,6 +363,11 @@ export interface PrescriptionResponse {
   patient?: PatientResponse;
   doctor?: DoctorResponse;
   pharmacy?: PharmacyResponse;
+  // Flattened by the pharmacy endpoints for direct rendering.
+  doctor_name?: string;
+  patient_name?: string;
+  patient_uhid?: string;
+  dispensed_at?: string;
 }
 
 // Lab Report Types
