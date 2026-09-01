@@ -58,6 +58,15 @@ export default function DoctorDashboard() {
   const inConsultation = queueData?.queue?.filter((q: any) => q.status === "in_consultation") || [];
   const currentPatient = inConsultation.length > 0 ? inConsultation[0] : null;
 
+  const handleStartConsultation = async (queueId: number) => {
+    try {
+      await queueApi.updateQueueStatus(queueId, "in_consultation");
+    } catch {
+      // Already in consultation (or moved elsewhere) — still open the screen.
+    }
+    router.push(`/dashboard/doctor/consultation/${queueId}`);
+  };
+
   return (
     <DashboardLayout breadcrumbs={breadcrumbs} allowedRoles={['doctor']}>
       <div className="space-y-6">
@@ -199,10 +208,10 @@ export default function DoctorDashboard() {
                         <span className="text-sm">{patient.patient_name}</span>
                         <Badge variant="outline" className="text-xs">{patient.patient_uhid}</Badge>
                       </div>
-                      <Button 
-                        size="sm" 
+                      <Button
+                        size="sm"
                         variant="outline"
-                        onClick={() => router.push(`/dashboard/doctor/consultation/${patient.queue_id}`)}
+                        onClick={() => handleStartConsultation(patient.queue_id)}
                       >
                         Start
                       </Button>

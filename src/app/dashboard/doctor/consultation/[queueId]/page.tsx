@@ -146,10 +146,20 @@ export default function ConsultationPage() {
       const patientData = await consultationApi.getPatientByQueue(parseInt(queueId));
       setPatient(patientData);
 
-      // Queue status drives the End Session control.
+      // Opening the chart means the doctor is now seeing this patient: promote a
+      // still-waiting entry so timing, prescribing and End Session all behave.
       try {
         const qs = await queueApi.getQueueStatus(parseInt(queueId));
-        setQueueStatus(qs.status);
+        let status = qs.status;
+        if (status === 'waiting') {
+          try {
+            await queueApi.updateQueueStatus(parseInt(queueId), 'in_consultation');
+            status = 'in_consultation';
+          } catch (error) {
+            console.warn('Could not start consultation:', error);
+          }
+        }
+        setQueueStatus(status);
       } catch (error) {
         console.warn('Could not load queue status:', error);
       }
@@ -239,6 +249,11 @@ export default function ConsultationPage() {
     }
     try {
       setEnding(true);
+      // Promote a still-waiting entry first — a queue only allows
+      // waiting → in_consultation → completed.
+      if (queueStatus === 'waiting') {
+        await queueApi.updateQueueStatus(parseInt(queueId), 'in_consultation');
+      }
       await queueApi.updateQueueStatus(parseInt(queueId), 'completed');
       toast.success('Consultation completed');
       router.push('/dashboard/doctor/queue-management');
